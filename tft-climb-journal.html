@@ -264,6 +264,28 @@ function render(){
   drawChart(all);
 }
 
+/* Chart plugin: paints a coloured horizontal band behind each tier (drawn before the line).
+   Band i covers rank values i*400 to i*400+400. Index 7 = Master+ (no upper limit). */
+const BAND_COLORS = ["#8a8f98","#b0693a","#b8c4d6","#f5b942","#3fb8af","#2ecc71","#6ec6ff","#b46bff"];
+const BAND_NAMES = [...TIERS.slice(0,7), "Master+"];
+const rankBands = {
+  id: "rankBands",
+  beforeDatasetsDraw(c){
+    const ctx = c.ctx, a = c.chartArea, y = c.scales.y;
+    ctx.save();
+    ctx.font = "600 11px system-ui, sans-serif"; ctx.textAlign = "right";
+    BAND_COLORS.forEach((col, i) => {
+      const lo = Math.max(i * 400, y.min), hi = Math.min(i === 7 ? Infinity : i * 400 + 400, y.max);
+      if (lo >= hi) return;                        // this tier is outside the visible range
+      const top = y.getPixelForValue(hi), bottom = y.getPixelForValue(lo);
+      ctx.globalAlpha = 0.2; ctx.fillStyle = col;
+      ctx.fillRect(a.left, top, a.right - a.left, bottom - top);
+      ctx.globalAlpha = 0.9; ctx.fillText(BAND_NAMES[i], a.right - 6, top + 14);
+    });
+    ctx.restore();
+  }
+};
+
 function drawChart(all){
   const pts = all.map(g => rankValue(g.tier, g.div, g.lp));
   $("chartEmpty").style.display = pts.length >= 2 ? "none" : "block";
@@ -272,13 +294,14 @@ function drawChart(all){
   chart = new Chart($("chart"), {
     type: "line",
     data: { labels: all.map((g,i) => "#" + (i+1)),
-            datasets: [{ data: pts, borderColor: "#f5b942", backgroundColor: "rgba(245,185,66,.15)", fill: true, tension: .25, pointRadius: 3 }] },
+            datasets: [{ data: pts, borderColor: "#e8ecf8", pointBackgroundColor: "#e8ecf8", fill: false, tension: .25, pointRadius: 3 }] },
+    plugins: [rankBands],
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: {
         title: items => "Game " + items[0].label, label: ctx => rankLabel(ctx.parsed.y) } } },
       scales: {
         x: { ticks: { color: "#8b95b3", maxTicksLimit: 10 }, grid: { color: "#262f4a" } },
-        y: { ticks: { color: "#8b95b3", stepSize: 100, callback: v => v % 400 === 0 ? (v >= 2800 ? "Master+" : TIERS[v/400]) : "" }, grid: { color: "#262f4a" } } } }
+        y: { ticks: { color: "#8b95b3", stepSize: 100, maxTicksLimit: 8, callback: v => v >= 2800 ? "Master+ " + (v - 2800) : TIERS[Math.floor(v / 400)] + " " + ["IV","III","II","I"][Math.floor((v % 400) / 100)] }, grid: { color: "#262f4a" } } } }
   });
 }
 
@@ -290,7 +313,8 @@ $("histBody").addEventListener("click", e => {
 });
 document.querySelectorAll("th.sortable").forEach(th => th.addEventListener("click", () => {
   const k = th.dataset.k;
-  sortDir = sortKey === k ? -sortDir : -1; sortKey = k; render();
+  sortDir = sortKey === k ? -sortDir : (k === "avg" ? 1 : -1);   // avg: lowest (best) first
+  sortKey = k; render();
 }));
 
 /* ===== Nice-to-haves: sample data, export/import, clear ===== */
