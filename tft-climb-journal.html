@@ -31,7 +31,13 @@ button.small{padding:3px 8px;font-size:12px}
 .stat{background:var(--card2);border-radius:10px;padding:10px 12px}
 .stat b{display:block;font-size:22px;color:var(--gold)}
 .stat small{color:var(--mu)}
-.two{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.two{display:grid;gap:16px;grid-template-columns:1fr}
+.two > div + div{border-top:1px solid var(--line);padding-top:16px}   /* stacked (phone): line between */
+@media (min-width:640px){
+  .two{grid-template-columns:1fr 1fr;gap:0}
+  .two > div:first-child{padding-right:20px}
+  .two > div + div{border-top:0;padding-top:0;border-left:1px solid var(--line);padding-left:20px}   /* side by side: vertical divider */
+}
 .scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
 th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
