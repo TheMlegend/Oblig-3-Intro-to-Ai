@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TFT Climb Journal</title>
+<style>
+/* ---------- Theme tokens (dark, gaming look) ---------- */
+:root{color-scheme:dark;--bg:#0b0e17;--card:#141a2b;--card2:#1b2238;--line:#262f4a;--tx:#e8ecf8;--mu:#8b95b3;--gold:#f5b942;--teal:#4fd1c5;--bad:#ff5d73;--good:#5be38c;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:radial-gradient(1200px 500px at 50% -100px,#1d2547,var(--bg));color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+main{max-width:1050px;margin:0 auto;padding:16px}
+h1{margin:8px 0 2px;font-size:28px;letter-spacing:.5px}
+h1 span{color:var(--gold)}
+h2{margin:0 0 12px;font-size:15px;text-transform:uppercase;letter-spacing:1.5px;color:var(--teal)}
+.sub{color:var(--mu);margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+label{display:block;font-size:12px;color:var(--mu);margin-bottom:3px}
+input,select,textarea,button{font:inherit;color:var(--tx);background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:0}
+button{cursor:pointer;width:auto;font-weight:600}
+button.primary{background:var(--gold);color:#1a1300;border-color:var(--gold)}
+button.danger{color:var(--bad)}
+button.small{padding:3px 8px;font-size:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin-top:8px}
+#tilt{display:none;background:#3a1620;border:1px solid var(--bad);color:#ffc2cb;border-radius:12px;padding:12px 16px;margin-bottom:16px}
+.stat{background:var(--card2);border-radius:10px;padding:10px 12px}
+.stat b{display:block;font-size:22px;color:var(--gold)}
+.stat small{color:var(--mu)}
+.two{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--mu);font-weight:600;font-size:12px;white-space:nowrap}
+th.sortable{cursor:pointer}
+th.sortable:hover{color:var(--gold)}
+.p1{color:var(--gold);font-weight:700}.top{color:var(--good)}.low{color:var(--bad)}
+.chartbox{position:relative;height:280px}
+.empty{color:var(--mu);padding:8px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>TFT <span>Climb</span> Journal</h1>
+<p class="sub">Log your ranked games, spot what works, climb more consistently.</p>
+
+<div id="tilt"></div>
+
+<!-- ===== 1. LOG A GAME ===== -->
+<section class="card">
+  <h2 id="formTitle">Log a game</h2>
+  <form id="gameForm" novalidate>
+    <div class="grid">
+      <div><label for="place">Placement (1-8)</label><input id="place" type="number" min="1" max="8" step="1" inputmode="numeric"></div>
+      <div><label for="comp">Comp played</label><input id="comp" list="compList" placeholder="e.g. Sniper reroll" autocomplete="off"><datalist id="compList"></datalist></div>
+      <div><label for="aug">Key augments</label><input id="aug" placeholder="e.g. Cybernetic Uplink"></div>
+      <div><label for="tier">Rank: tier</label><select id="tier"></select></div>
+      <div><label for="div">Division</label><select id="div"><option value="4">IV</option><option value="3">III</option><option value="2">II</option><option value="1">I</option></select></div>
+      <div><label for="lp">LP after game</label><input id="lp" type="number" min="0" step="1" inputmode="numeric" placeholder="0-99"></div>
+    </div>
+    <div style="margin-top:10px"><label for="note">Note</label><textarea id="note" rows="2" maxlength="300" placeholder="What went well or wrong?"></textarea></div>
+    <div class="err" id="err"></div>
+    <div class="row">
+      <button class="primary" type="submit" id="saveBtn">Add game</button>
+      <button type="button" id="cancelBtn" style="display:none">Cancel edit</button>
+    </div>
+  </form>
+</section>
+
+<!-- ===== 3. STATS DASHBOARD ===== -->
+<section class="card">
+  <h2>Stats</h2>
+  <div class="two">
+    <div><label>All games (<span id="nAll">0</span>)</label><div class="grid" id="statAll"></div></div>
+    <div><label>Last 20 games (<span id="nLast">0</span>)</label><div class="grid" id="statLast"></div></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Rank progress</h2>
+  <div class="chartbox"><canvas id="chart"></canvas></div>
+  <div class="empty" id="chartEmpty">Log at least 2 games to see your climb.</div>
+</section>
+
+<section class="card">
+  <h2>Stats per comp <span style="text-transform:none;letter-spacing:0;color:var(--mu)">(click a header to sort)</span></h2>
+  <div class="scroll"><table>
+    <thead><tr><th class="sortable" data-k="name">Comp</th><th class="sortable" data-k="n">Games</th><th class="sortable" data-k="avg">Avg place</th><th class="sortable" data-k="t4">Top 4 rate</th></tr></thead>
+    <tbody id="compBody"></tbody>
+  </table></div>
+</section>
+
+<!-- ===== 2. GAME HISTORY ===== -->
+<section class="card">
+  <h2>History</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Date</th><th>#</th><th>Comp</th><th>Augments</th><th>Rank</th><th>Note</th><th></th></tr></thead>
+    <tbody id="histBody"></tbody>
+  </table></div>
+  <div class="empty" id="histEmpty">No games yet. Log your first one above, or load sample data.</div>
+  <div class="row">
+    <button id="sampleBtn">Load sample data</button>
+    <button id="exportBtn">Export JSON</button>
+    <button id="importBtn">Import JSON</button>
+    <button id="clearBtn" class="danger">Delete all</button>
+    <input id="importFile" type="file" accept="application/json,.json" style="display:none">
+  </div>
+</section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/* ===== Data model =====
+   game = { id, ts (ms), place 1-8, comp, aug, tier, div (1-4), lp, note }
+   Everything is stored as a JSON array in localStorage under KEY. */
+const KEY = "tftClimbJournal.v1";
+const TIERS = ["Iron","Bronze","Silver","Gold","Platinum","Emerald","Diamond","Master","Grandmaster","Challenger"];
+const DIV_NAMES = {4:"IV",3:"III",2:"II",1:"I"};
+const MASTER_IDX = 7;           // Master and above have no divisions
+let games = loadGames();
+let editId = null, sortKey = "n", sortDir = -1, chart = null;
+
+function loadGames(){
+  try { const d = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(d) ? d : []; }
+  catch(e){ return []; }      // empty or blocked storage -> start fresh
+}
+function saveGames(){ try { localStorage.setItem(KEY, JSON.stringify(games)); } catch(e){} }
+
+/* ===== Rank <-> number =====
+   Iron..Diamond: 4 divisions x 100 LP = 400 per tier. Master+ all share one LP ladder starting at 2800. */
+function rankValue(tier, div, lp){
+  const i = TIERS.indexOf(tier);
+  return i >= MASTER_IDX ? 2800 + lp : i * 400 + (4 - div) * 100 + lp;
+}
+function rankLabel(v){
+  if (v >= 2800) return "Master+ " + (v - 2800) + " LP";
+  const i = Math.floor(v / 400), r = v % 400;
+  return TIERS[i] + " " + ["IV","III","II","I"][Math.floor(r / 100)] + " " + (r % 100) + " LP";
+}
+function gameRank(g){
+  const i = TIERS.indexOf(g.tier);
+  return g.tier + (i >= MASTER_IDX ? "" : " " + DIV_NAMES[g.div]) + " " + g.lp + " LP";
+}
+
+/* ===== Helpers ===== */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const chrono = () => [...games].sort((a,b) => a.ts - b.ts);
+const fmtDate = ts => new Date(ts).toLocaleDateString(undefined,{day:"numeric",month:"short"}) + " " + new Date(ts).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
+const placeClass = p => p === 1 ? "p1" : p <= 4 ? "top" : "low";
+
+/* ===== Form setup ===== */
+$("tier").innerHTML = TIERS.map(t => `<option>${t}</option>`).join("");
+function syncDivision(){ $("div").disabled = TIERS.indexOf($("tier").value) >= MASTER_IDX; }
+$("tier").addEventListener("change", syncDivision);
+
+function prefillRank(){          // default the rank fields to the most recent game's rank
+  const last = chrono().pop();
+  if (last){ $("tier").value = last.tier; $("div").value = last.div; $("lp").value = last.lp; }
+  else { $("tier").value = "Emerald"; $("div").value = 4; $("lp").value = ""; }
+  syncDivision();
+}
+
+function validate(){
+  const place = Number($("place").value), comp = $("comp").value.trim();
+  const lpRaw = $("lp").value.trim(), lp = Number(lpRaw);
+  const master = TIERS.indexOf($("tier").value) >= MASTER_IDX;
+  if (!Number.isInteger(place) || place < 1 || place > 8) return "Placement must be a whole number from 1 to 8.";
+  if (!comp) return "Please enter the comp you played.";
+  if (lpRaw === "" || !Number.isInteger(lp) || lp < 0) return "LP must be a whole number, 0 or higher.";
+  if (!master && lp > 99) return "LP must be 0-99 below Master (promote to the next division instead).";
+  return "";
+}
+
+$("gameForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const msg = validate(); $("err").textContent = msg;
+  if (msg) return;
+  const data = {
+    place: Number($("place").value), comp: $("comp").value.trim(), aug: $("aug").value.trim(),
+    tier: $("tier").value, div: Number($("div").value), lp: Number($("lp").value), note: $("note").value.trim()
+  };
+  if (editId){ Object.assign(games.find(g => g.id === editId), data); }   // keep original date
+  else { games.push({ id: Date.now() + Math.random().toString(36).slice(2,6), ts: Date.now(), ...data }); }
+  saveGames(); resetForm(); render();
+});
+$("cancelBtn").addEventListener("click", resetForm);
+
+function resetForm(){
+  editId = null; $("gameForm").reset(); $("err").textContent = "";
+  $("formTitle").textContent = "Log a game"; $("saveBtn").textContent = "Add game"; $("cancelBtn").style.display = "none";
+  prefillRank();
+}
+function startEdit(id){
+  const g = games.find(x => x.id === id); if (!g) return;
+  editId = id;
+  $("place").value = g.place; $("comp").value = g.comp; $("aug").value = g.aug; $("note").value = g.note;
+  $("tier").value = g.tier; $("div").value = g.div; $("lp").value = g.lp; syncDivision();
+  $("formTitle").textContent = "Edit game"; $("saveBtn").textContent = "Save changes"; $("cancelBtn").style.display = "";
+  $("gameForm").scrollIntoView({behavior:"smooth"});
+}
+
+/* ===== Stats ===== */
+function stat(a){
+  const n = a.length;
+  if (!n) return {n:0, avg:"–", t4:"–", win:"–"};
+  return { n,
+    avg: (a.reduce((s,g) => s + g.place, 0) / n).toFixed(2),
+    t4: Math.round(a.filter(g => g.place <= 4).length / n * 100) + "%",
+    win: Math.round(a.filter(g => g.place === 1).length / n * 100) + "%" };
+}
+function statBoxes(s){
+  return [["Avg placement",s.avg],["Top 4 rate",s.t4],["Win rate (1st)",s.win]]
+    .map(([l,v]) => `<div class="stat"><b>${v}</b><small>${l}</small></div>`).join("");
+}
+function compStats(){
+  const map = {};
+  games.forEach(g => {
+    const k = g.comp.toLowerCase();
+    (map[k] = map[k] || {name:g.comp, list:[]}).list.push(g);
+  });
+  return Object.values(map).map(c => {
+    const n = c.list.length, avg = c.list.reduce((s,g) => s + g.place, 0) / n;
+    return {name:c.name, n, avg, t4: c.list.filter(g => g.place <= 4).length / n};
+  });
+}
+
+/* ===== Render ===== */
+function render(){
+  const all = chrono(), last20 = all.slice(-20);
+  $("nAll").textContent = all.length; $("nLast").textContent = last20.length;
+  $("statAll").innerHTML = statBoxes(stat(all));
+  $("statLast").innerHTML = statBoxes(stat(last20));
+
+  // Tilt warning: last 3+ games all placed 5-8
+  const l3 = all.slice(-3), tilt = $("tilt");
+  if (l3.length === 3 && l3.every(g => g.place >= 5)){
+    let streak = 0; for (let i = all.length - 1; i >= 0 && all[i].place >= 5; i--) streak++;
+    tilt.style.display = "block";
+    tilt.innerHTML = `<b>Tilt warning:</b> your last ${streak} games were all 5th or worse. Consider taking a break before queueing again.`;
+  } else tilt.style.display = "none";
+
+  // Comp suggestions + comp table
+  $("compList").innerHTML = [...new Set(games.map(g => g.comp))].map(c => `<option value="${esc(c)}">`).join("");
+  const rows = compStats().sort((a,b) => {
+    const x = a[sortKey], y = b[sortKey];
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * (sortKey === "name" ? -sortDir : sortDir);
+  });
+  $("compBody").innerHTML = rows.length
+    ? rows.map(r => `<tr><td>${esc(r.name)}</td><td>${r.n}</td><td>${r.avg.toFixed(2)}</td><td>${Math.round(r.t4*100)}%</td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">No data yet.</td></tr>`;
+
+  // History table (newest first)
+  $("histEmpty").style.display = games.length ? "none" : "block";
+  $("histBody").innerHTML = [...all].reverse().map(g =>
+    `<tr><td>${fmtDate(g.ts)}</td><td class="${placeClass(g.place)}">${g.place}</td><td>${esc(g.comp)}</td><td>${esc(g.aug)}</td>
+     <td>${esc(gameRank(g))}</td><td>${esc(g.note)}</td>
+     <td style="white-space:nowrap"><button class="small" data-edit="${g.id}">Edit</button> <button class="small danger" data-del="${g.id}">Delete</button></td></tr>`).join("");
+
+  drawChart(all);
+}
+
+function drawChart(all){
+  const pts = all.map(g => rankValue(g.tier, g.div, g.lp));
+  $("chartEmpty").style.display = pts.length >= 2 ? "none" : "block";
+  if (chart){ chart.destroy(); chart = null; }
+  if (pts.length < 2 || typeof Chart === "undefined") return;
+  chart = new Chart($("chart"), {
+    type: "line",
+    data: { labels: all.map((g,i) => "#" + (i+1)),
+            datasets: [{ data: pts, borderColor: "#f5b942", backgroundColor: "rgba(245,185,66,.15)", fill: true, tension: .25, pointRadius: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: {
+        title: items => "Game " + items[0].label, label: ctx => rankLabel(ctx.parsed.y) } } },
+      scales: {
+        x: { ticks: { color: "#8b95b3", maxTicksLimit: 10 }, grid: { color: "#262f4a" } },
+        y: { ticks: { color: "#8b95b3", stepSize: 100, callback: v => v % 400 === 0 ? (v >= 2800 ? "Master+" : TIERS[v/400]) : "" }, grid: { color: "#262f4a" } } } }
+  });
+}
+
+/* ===== Table clicks (edit / delete / sort) ===== */
+$("histBody").addEventListener("click", e => {
+  const ed = e.target.dataset.edit, del = e.target.dataset.del;
+  if (ed) startEdit(ed);
+  if (del && confirm("Delete this game?")){ games = games.filter(g => g.id !== del); saveGames(); if (editId === del) resetForm(); render(); }
+});
+document.querySelectorAll("th.sortable").forEach(th => th.addEventListener("click", () => {
+  const k = th.dataset.k;
+  sortDir = sortKey === k ? -sortDir : -1; sortKey = k; render();
+}));
+
+/* ===== Nice-to-haves: sample data, export/import, clear ===== */
+$("sampleBtn").addEventListener("click", () => {
+  if (games.length && !confirm("Add sample games to your existing data?")) return;
+  const comps = ["Sniper reroll","Fast 9 legend","Bruiser 3-cost","Mage flex"], augs = ["Cybernetic Uplink","Rich Get Richer","Pandora’s Items","Level Up!"];
+  let rank = rankValue("Emerald", 4, 20), t = Date.now() - 30 * 3600e3 * 6;
+  for (let i = 0; i < 30; i++){
+    const c = Math.floor(Math.random() * comps.length);
+    const place = Math.min(8, Math.max(1, Math.round(3.4 + (Math.random() - .5) * 6 + (c === 1 ? -.8 : c === 3 ? .6 : 0))));
+    rank = Math.max(0, rank + (5 - place) * 7 + Math.round(Math.random() * 6 - 3));
+    const tier = TIERS[Math.min(Math.floor(rank / 400), 6)], r = rank % 400;
+    t += 3600e3 * 6;
+    games.push({ id: "s" + i + Math.random().toString(36).slice(2,5), ts: t, place, comp: comps[c], aug: augs[Math.floor(Math.random()*augs.length)],
+      tier, div: 4 - Math.floor(r / 100), lp: r % 100, note: place <= 2 ? "Good econ, hit my spike." : place >= 7 ? "Greedy with the pivot." : "" });
+  }
+  saveGames(); resetForm(); render();
+});
+$("exportBtn").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(games, null, 2)], {type:"application/json"}));
+  a.download = "tft-climb-journal.json"; a.click(); URL.revokeObjectURL(a.href);
+});
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const d = JSON.parse(rd.result);
+      const ok = Array.isArray(d) && d.every(g => g && g.place >= 1 && g.place <= 8 && typeof g.comp === "string" && TIERS.includes(g.tier) && typeof g.ts === "number");
+      if (!ok) throw new Error("bad format");
+      games = d.map(g => ({ id: String(g.id || Date.now() + Math.random()), ts: g.ts, place: g.place, comp: g.comp, aug: g.aug || "", tier: g.tier, div: g.div || 4, lp: Number(g.lp) || 0, note: g.note || "" }));
+      saveGames(); resetForm(); render();
+    } catch(err){ alert("Could not import: the file is not a valid journal export."); }
+    e.target.value = "";
+  };
+  rd.readAsText(f);
+});
+$("clearBtn").addEventListener("click", () => {
+  if (games.length && confirm("Delete ALL games? This cannot be undone.")){ games = []; saveGames(); resetForm(); render(); }
+});
+
+resetForm(); render();
+</script>
+</body>
+</html>
